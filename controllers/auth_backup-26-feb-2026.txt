@@ -1,0 +1,142 @@
+const User = require("../models/User");
+const jwt = require("jsonwebtoken");
+const { ROLE_PERMISSIONS } = require("../utils/permissions");
+const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
+
+const isProd = process.env.NODE_ENV === "production";
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? "none" : "lax",
+  path: "/",
+};
+
+/* REGISTER */
+exports.register = async (req, res, next) => {
+  try {
+    const { name, email, password, role, phone, assignedManager, isActive } = req.body;
+
+    if (await User.findOne({ email }))
+      return res.status(400).json({ message: "Email already exists" });
+
+    const user = await User.create({
+      name,
+      email,
+      password,
+      phone,
+      role,
+      permissions: ROLE_PERMISSIONS[role] || [],
+      assignedManager,
+      isActive: isActive !== undefined ? isActive : true
+    });
+
+    res.status(201).json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        permissions: user.permissions,
+        assignedManager: user.assignedManager,
+        isActive: user.isActive
+      }
+    });
+  } catch (e) {
+    next(e);
+  }
+};
+
+exports.login = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    // const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).populate('assignedManager', 'name email role');
+    
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+
+    if (!user.isActive)
+      return res.status(403).json({ message: "Account inactive" });
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch)
+      return res.status(401).json({ message: "Invalid credentials" });
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    res.cookie("accessToken", accessToken, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      ...cookieOptions,
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    res.json({
+      token: accessToken,
+      user: {
+        _id: user._id,
+        name: user.name,
+        role: user.role,
+        email: user.email,
+        phone:user.phone,
+        isActive: user.isActive,
+        createdAt:user.createdAt,
+        assignedManager:user.assignedManager
+      }
+    });
+
+  } catch (e) {
+    next(e);
+  }
+};
+
+exports.refreshToken = async (req, res) => {
+  try {
+    const token = req.cookies.refreshToken;
+    if (!token) return res.status(401).json({ message: "No refresh token" });
+
+    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+
+    const user = await User.findById(decoded.id);
+    if (!user || user.refreshToken !== token)
+      return res.status(401).json({ message: "Invalid session" });
+
+    const newAccessToken = generateAccessToken(user);
+
+    res.cookie("accessToken", newAccessToken, {
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000
+    });
+
+    res.json({ success: true });
+
+  } catch {
+    res.status(401).json({ message: "Session expired" });
+  }
+};
+
+exports.me = async (req, res) => {
+  res.json({ user: req.user });
+};
+
+exports.logout = async (req, res) => {
+  if (req.user) {
+    req.user.refreshToken = null;
+    await req.user.save();
+  }
+
+  res.clearCookie("accessToken");
+  res.clearCookie("refreshToken");
+
+  res.json({ message: "Logged out" });
+};
+

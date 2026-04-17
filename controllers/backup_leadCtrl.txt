@@ -1,0 +1,187 @@
+const Lead = require('../models/Lead');
+const User = require('../models/User');
+
+// ✅ Create Lead
+exports.createLead = async (req, res, next) => {
+  try {
+    const payload = { ...req.body, createdBy: req.user._id };
+    const lead = await Lead.create(payload);
+
+    // Broadcast new lead
+    const io = req.app.get('io');
+    if (io) io.emit('lead:created', lead);
+
+    res.status(201).json(lead);
+  } catch (e) {
+    next(e);
+  }
+};
+
+// ✅ Get All Leads (role-based)
+exports.getLeads = async (req, res, next) => {
+  try {
+    const { role, _id } = req.user;
+    let query = {};
+
+    if (role === 'admin' || role === 'superadmin') query = {};
+    else if (role === 'manager') query = { assignedManager: _id };
+    else if (role === 'executive') query = { assignedExecutive: _id };
+
+    const leads = await Lead.find(query)
+      .populate('assignedManager assignedExecutive createdBy followUps.createdBy remarks.createdBy')
+      .sort({ createdAt: -1 });
+
+    res.json(leads);
+  } catch (e) {
+    next(e);
+  }
+};
+
+// ✅ Get Single Lead
+exports.getLead = async (req, res, next) => {
+  try {
+    const lead = await Lead.findById(req.params.id)
+      .populate('assignedManager assignedExecutive createdBy followUps.createdBy remarks.createdBy');
+
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    res.json(lead);
+  } catch (e) {
+    next(e);
+  }
+};
+
+// ✅ Assign Manager
+exports.assignToManager = async (req, res, next) => {
+  try {
+    const { leadId } = req.params;
+    const { managerId } = req.body;
+
+    const lead = await Lead.findByIdAndUpdate(
+      leadId,
+      { assignedManager: managerId, updatedAt: new Date() },
+      { new: true }
+    );
+
+    const io = req.app.get('io');
+    if (io) io.to(managerId.toString()).emit('lead:assigned', lead);
+
+    res.json(lead);
+  } catch (e) {
+    next(e);
+  }
+};
+
+// ✅ Assign Executive
+exports.assignToExecutive = async (req, res, next) => {
+  try {
+    const { leadId } = req.params;
+    const { executiveId } = req.body;
+
+    const lead = await Lead.findByIdAndUpdate(
+      leadId,
+      { assignedExecutive: executiveId, updatedAt: new Date() },
+      { new: true }
+    );
+
+    const io = req.app.get('io');
+    if (io) io.to(executiveId.toString()).emit('lead:assigned', lead);
+
+    res.json(lead);
+  } catch (e) {
+    next(e);
+  }
+};
+
+// ✅ Update Status (NO COMMISSION)
+exports.updateStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const lead = await Lead.findById(id);
+    if (!lead) return res.status(404).json({ message: 'Not found' });
+
+    lead.status = status;
+    lead.updatedAt = new Date();
+    await lead.save();
+
+    const io = req.app.get('io');
+    if (io) io.emit('lead:statusUpdated', lead);
+
+    res.json(lead);
+  } catch (e) {
+    next(e);
+  }
+};
+
+// ✅ Update Lead
+exports.updateLead = async (req, res, next) => {
+  const { id } = req.params;
+  try {
+    const lead = await Lead.findByIdAndUpdate(id, req.body, { new: true });
+    res.json(lead);
+  } catch (e) {
+    next(e);
+  }
+};
+
+// ✅ Delete Lead
+exports.deleteLead = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const lead = await Lead.findByIdAndDelete(id);
+    res.status(200).json({ success: true, message: "Lead Deleted", data: lead });
+  } catch (error) {
+    res.status(404).json({ success: false, message: "Lead Not Found" });
+  }
+};
+
+// ✅ Add Follow-up
+exports.addFollowUp = async (req, res, next) => {
+  try {
+    const { id } = req.params; // lead ID
+    const { date, nextFollowUpDate, notes } = req.body;
+
+    const lead = await Lead.findById(id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    lead.followUps.push({
+      date,
+      nextFollowUpDate,
+      notes,
+      createdBy: req.user._id
+    });
+
+    lead.updatedAt = new Date();
+    await lead.save();
+
+    res.json(lead);
+  } catch (e) {
+    next(e);
+  }
+};
+
+// ✅ Add Remark
+exports.addRemark = async (req, res, next) => {
+  try {
+    const { id } = req.params; // lead ID
+    const { date, nextRemarkDate, comment } = req.body;
+
+    const lead = await Lead.findById(id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    lead.remarks.push({
+      date,
+      nextRemarkDate,
+      comment,
+      createdBy: req.user._id
+    });
+
+    lead.updatedAt = new Date();
+    await lead.save();
+
+    res.json(lead);
+  } catch (e) {
+    next(e);
+  }
+};

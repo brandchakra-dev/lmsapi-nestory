@@ -1,0 +1,102 @@
+const express = require('express');
+const router = express.Router();
+const leadCtrl = require('../controllers/leadController');
+const { protect, authorizeRoles } = require('../middleware/authMiddleware');
+
+router.post('/', protect, authorizeRoles('admin','superadmin','manager'), leadCtrl.createLead);
+
+router.get('/', protect, authorizeRoles('admin','superadmin','manager','executive'), leadCtrl.getLeads);
+router.get('/:id', protect, authorizeRoles('admin','superadmin','manager','executive'),leadCtrl.getLead);
+
+// today folowup -- app
+
+router.get( "/followups/today", protect,authorizeRoles("admin", "superadmin", "manager", "executive"),
+    leadCtrl.getTodaysFollowUps
+);
+
+router.get("/followups/upcoming",protect, authorizeRoles("admin", "superadmin", "manager", "executive"),
+    leadCtrl.getUpcomingFollowUps
+);
+  
+  // NEW: Date range route
+  router.get(
+    "/followups/range",
+    protect,
+    authorizeRoles("admin", "superadmin", "manager", "executive"),
+    leadCtrl.getFollowUpsByDateRange
+  );
+  
+  // NEW: Complete follow-up route
+  router.patch(
+    "/:leadId/followups/:followUpId/complete",
+    protect,
+    authorizeRoles("admin", "superadmin", "manager", "executive"),
+    leadCtrl.completeFollowUp
+  );
+
+router.put('/:id/status', protect, authorizeRoles('admin','superadmin','manager','executive'),leadCtrl.updateStatus);
+
+router.delete('/:id',protect, authorizeRoles('admin','superadmin'),leadCtrl.deleteLead);
+
+router.put('/edit/:id',protect, authorizeRoles('admin','superadmin','manager','executive'),leadCtrl.updateLead);
+
+router.get(
+    "/:id/timeline",
+    protect,
+    authorizeRoles("admin", "superadmin", "manager", "executive"),
+    leadCtrl.getLeadTimeline
+  );
+
+  router.get(
+  "/stats/dashboard",
+  protect,
+  authorizeRoles("admin", "superadmin", "manager", "executive"),
+  leadCtrl.getLeadStats
+);
+
+router.post("/bulk-import", protect, authorizeRoles('admin','superadmin'), leadCtrl.bulkImportLeads);
+  
+// assignment endpoints
+router.put('/:leadId/assign-manager', protect, authorizeRoles('admin','superadmin'), leadCtrl.assignToManager);
+router.put('/:leadId/assign-exec', protect, authorizeRoles('admin','superadmin','manager'), leadCtrl.assignToExecutive);
+
+// 👇 New routes
+router.post('/:id/follow-ups', protect, leadCtrl.addFollowUp);
+router.post('/:id/remarks', protect, authorizeRoles("admin", "superadmin", "manager", "executive"), leadCtrl.addRemark);
+
+
+// ============== ADD THESE ROUTES ==============
+
+// 1. Get executives for manager (with stats)
+router.get(
+  '/manager/executives',
+  protect,
+  authorizeRoles('manager'),
+  leadCtrl.getManagerExecutives
+);
+
+// 2. Get unassigned leads for manager
+router.get(
+  '/manager/unassigned',
+  protect,
+  authorizeRoles('manager'),
+  leadCtrl.getUnassignedLeads
+);
+
+// 3. Get team performance stats
+router.get(
+  '/manager/team-performance',
+  protect,
+  authorizeRoles('manager'),
+  leadCtrl.getTeamPerformance
+);
+
+// 4. Get recent activities for manager's team
+router.get(
+  '/manager/recent-activities',
+  protect,
+  authorizeRoles('manager'),
+  leadCtrl.getRecentActivities
+);
+
+module.exports = router;

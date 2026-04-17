@@ -1,0 +1,85 @@
+13 jsn backup
+
+
+
+const User = require('../models/User');
+const jwt = require('jsonwebtoken');
+const { ROLE_PERMISSIONS } = require('../utils/permissions');
+
+function generateToken(user){
+  return jwt.sign(
+    { id: user._id, role: user.role, permissions: user.permissions },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+}
+
+exports.register = async (req,res,next) => {
+  try {
+    const { name, email, password, role, phone, assignedManager, isActive } = req.body; 
+    // ✅ isActive added here
+
+    if(await User.findOne({ email }))
+      return res.status(400).json({ message: 'Email already exists' });
+
+    const user = await User.create({
+      name,
+      email,
+      password,
+      phone,
+      role,
+      permissions: ROLE_PERMISSIONS[role] || [],
+      assignedManager,
+      isActive: isActive !== undefined ? isActive : true // ✅ Handle undefined case
+    });
+
+    res.status(201).json({
+      token: generateToken(user),
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        permissions: user.permissions,
+        assignedManager: user.assignedManager,
+        isActive: user.isActive
+      }
+    });
+  } catch(e) { next(e); }
+};
+
+exports.login = async (req,res,next) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(401).json({ message: 'Invalid credentials' });
+
+    // 🔴 BLOCK INACTIVE USERS IMMEDIATELY
+    if (!user.isActive) {
+      return res.status(403).json({
+        message: "Your account is inactive. Please contact administrator."
+      });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch)
+      return res.status(401).json({ message: 'Invalid credentials' });
+
+    res.json({
+      token: generateToken(user),
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        permissions: user.permissions,
+        isActive: user.isActive, // ✅ VERY IMPORTANT
+        
+      }
+    });
+  } catch(e){ next(e); }
+};
