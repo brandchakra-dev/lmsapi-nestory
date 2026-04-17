@@ -1,10 +1,20 @@
-import { Expo } from 'expo-server-sdk';
+let ExpoClass;
+let expo;
 
-const expo = new Expo();
+const getExpo = async () => {
+  if (!ExpoClass) {
+    const module = await import('expo-server-sdk');
+    ExpoClass = module.Expo;
+    expo = new ExpoClass();
+  }
+  return { ExpoClass, expo };
+};
 
-export async function sendPushNotification(pushToken, title, body, data = {}) {
+exports.sendPushNotification = async (pushToken, title, body, data = {}) => {
   try {
-    if (!pushToken || !Expo.isExpoPushToken(pushToken)) {
+    const { ExpoClass, expo } = await getExpo();
+
+    if (!pushToken || !ExpoClass.isExpoPushToken(pushToken)) {
       console.log('Invalid push token');
       return;
     }
@@ -24,4 +34,4 @@ export async function sendPushNotification(pushToken, title, body, data = {}) {
   } catch (error) {
     console.error('Push notification error:', error);
   }
-}
+};
