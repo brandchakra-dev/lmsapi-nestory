@@ -18,7 +18,30 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
-app.use(cors());
+// ── CORS configuration for production and development
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? ['https://lms.thenestory.in', 'https://thenestory.in', 'https://www.thenestory.in']
+  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5000'];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+    } else {
+      console.log('Blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,  // ✅ Important for cookies
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Accept', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie'],
+};
+
+app.use(cors(corsOptions));
 
 app.use(morgan('dev'));
 app.use(express.json());
