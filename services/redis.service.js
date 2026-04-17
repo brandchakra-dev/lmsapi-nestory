@@ -1,4 +1,4 @@
-const redis = require('redis');
+import { createClient } from 'redis';
 
 class RedisService {
   constructor() {
@@ -16,7 +16,7 @@ class RedisService {
       return;
     }
 
-    this.client = redis.createClient({
+    this.client = createClient({
       url: redisUrl,
       socket: {
         reconnectStrategy: (retries) => {
@@ -118,4 +118,4 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-module.exports = redisService;
+export default redisService;

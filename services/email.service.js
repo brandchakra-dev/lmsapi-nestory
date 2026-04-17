@@ -1,4 +1,4 @@
-const nodemailer = require('nodemailer');
+import { createTransport, getTestMessageUrl } from 'nodemailer';
 
 class EmailService {
   constructor() {
@@ -16,7 +16,7 @@ class EmailService {
       pass: process.env.SMTP_PASS ? "✅ Set" : "❌ Missing"
     });
 
-    this.transporter = nodemailer.createTransport({
+    this.transporter = createTransport({
       host: process.env.SMTP_HOST,
       port: parseInt(process.env.SMTP_PORT) || 587,
       secure: false, // 587 ke liye false
@@ -56,7 +56,7 @@ class EmailService {
       
       // Ethereal URL for testing (agar development mein ho)
       if (process.env.NODE_ENV !== 'production') {
-        console.log("📧 Preview URL:", nodemailer.getTestMessageUrl(info));
+        console.log("📧 Preview URL:", getTestMessageUrl(info));
       }
       
       return info;
@@ -85,4 +85,4 @@ class EmailService {
   }
 }
 
-module.exports = new EmailService();
+export default new EmailService();
