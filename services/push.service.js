@@ -30,7 +30,7 @@ exports.sendPushNotification = async (pushToken, title, body, data = {}) => {
     await expo.sendPushNotificationsAsync([message]);
 
     console.log("✅ Push sent");
-    
+
   } catch (error) {
     console.error('Push notification error:', error);
   }

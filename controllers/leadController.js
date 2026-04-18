@@ -28,6 +28,40 @@ exports.createLead = async (req, res, next) => {
 
     const lead = await Lead.create(payload);
 
+    // 🔔 Notify Manager
+if (lead.assignedManager) {
+  const manager = await User.findById(lead.assignedManager);
+
+  if (manager?.pushToken) {
+    await pushService.sendPushNotification(
+      manager.pushToken,
+      "📌 New Lead Assigned",
+      `New lead created: ${lead.name}`,
+      {
+        type: "lead_created",
+        leadId: lead._id,
+      }
+    );
+  }
+}
+
+// 🔔 Notify Executive
+if (lead.assignedExecutive) {
+  const executive = await User.findById(lead.assignedExecutive);
+
+  if (executive?.pushToken) {
+    await pushService.sendPushNotification(
+      executive.pushToken,
+      "🎯 New Lead Assigned",
+      `You have been assigned lead: ${lead.name}`,
+      {
+        type: "lead_created",
+        leadId: lead._id,
+      }
+    );
+  }
+}
+
     const io = req.app.get("io");
     if (io) io.emit("lead:created", lead);
 
@@ -36,39 +70,6 @@ exports.createLead = async (req, res, next) => {
     next(e);
   }
 };
-
-// exports.updateLead = async (req, res, next) => {
-//   try {
-//     const lead = await Lead.findById(req.params.id);
-//     if (!lead) return res.status(404).json({ message: "Lead not found" });
-
-//     const user = req.user;
-
-//     // Manager and Exe.. can update only own leads
-
-//     if (
-//       user.role === "manager" &&
-//       lead.assignedManager?.toString() !== user._id.toString()
-//     ) {
-//       return res.status(403).json({ message: "Not your lead" });
-//     }
-
-//     if (
-//       user.role === "executive" &&
-//       lead.assignedExecutive?.toString() !== user._id.toString()
-//     ) {
-//       return res.status(403).json({ message: "Not your lead" });
-//     }
-
-//     Object.assign(lead, req.body);
-//     lead.updatedAt = new Date();
-
-//     await lead.save();
-//     res.json(lead);
-//   } catch (e) {
-//     next(e);
-//   }
-// };
 
 exports.updateLead = async (req, res, next) => {
   try {
@@ -301,7 +302,6 @@ exports.addFollowUp = async (req, res, next) => {
   }
 };
 
-// ✅ Add Remark
 // ✅ Add Remark - FIXED VERSION
 exports.addRemark = async (req, res, next) => {
   try {
