@@ -4,6 +4,9 @@ exports.savePushToken = async (req, res) => {
   try {
     const { token } = req.body;
 
+    console.log("USER ID:", req.user?.id);
+    console.log("TOKEN:", token);
+
     await User.findByIdAndUpdate(req.user.id, {
       pushToken: token,
     });

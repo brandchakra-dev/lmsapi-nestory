@@ -157,9 +157,8 @@ exports.refreshToken = async (req, res) => {
 
     // 🍪 Web → set cookie
     res.cookie("accessToken", newAccessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "development",
-      sameSite: "lax",
+      ...cookieOptions,
+      maxAge: 15 * 60 * 1000,
     });
 
     // 📱 Mobile → send JSON
@@ -185,8 +184,8 @@ exports.logout = async (req, res) => {
     await req.user.save();
   }
 
-  res.clearCookie("accessToken");
-  res.clearCookie("refreshToken");
+  res.clearCookie("accessToken", cookieOptions);
+  res.clearCookie("refreshToken", cookieOptions);
 
   res.json({ message: "Logged out" });
 };

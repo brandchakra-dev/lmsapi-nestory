@@ -25,6 +25,8 @@ exports.sendPushNotification = async (pushToken, title, body, data = {}) => {
       title,
       body,
       data,
+      priority: 'high',  
+      channelId: 'default',  
     };
 
     await expo.sendPushNotificationsAsync([message]);
