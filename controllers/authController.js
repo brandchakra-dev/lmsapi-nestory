@@ -107,6 +107,7 @@ exports.login = async (req, res, next) => {
 
     res.json({
       token: accessToken,
+      refreshToken: refreshToken,
       user: {
         _id: user._id,
         name: user.name,
