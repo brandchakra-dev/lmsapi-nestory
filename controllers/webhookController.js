@@ -2,9 +2,9 @@ const axios = require("axios");
 const Lead = require("../models/Lead");
 const User = require("../models/User");
 const { mapFacebookLead } = require("../utils/fbMapper");
-const { sendPushNotification } = require("../utils/push");
+const { sendPushNotification } = require("../services/push.service");
 
-const VERIFY_TOKEN = "thenestory_verify_123";
+const VERIFY_TOKEN = "thenestory_verify_05521";
 
 // ✅ VERIFY
 exports.verifyWebhook = (req, res) => {
