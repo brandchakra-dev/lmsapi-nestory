@@ -13,6 +13,7 @@ const attendanceRoutes = require('./routes/attendanceRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 
 const  followupRoutes =  require('./routes/followupRoutes');
+const webhookRoutes = require("./routes/webhookRoutes");
 
 const errorHandler = require('./middleware/errorHandler');
 
@@ -71,6 +72,8 @@ app.use("/api/project", projectRoutes);
 app.use('/api/reports', reportRoutes);
 
 app.use('/api/followups', followupRoutes);
+
+app.use("/api/webhook", webhookRoutes);
 
 app.use(errorHandler);
 

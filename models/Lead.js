@@ -134,7 +134,12 @@ const leadSchema = new mongoose.Schema({
   // ✅ NEW: Next follow-up date for quick access
   nextFollowUpDate: {
     type: Date
-  }
+  },
+  fbLeadId: { type: String },
+  fbRawData: { type: Object },
+  fbAdName: { type: String },
+  fbAdsetName: { type: String },
+
 });
 
 // Indexes for better performance
