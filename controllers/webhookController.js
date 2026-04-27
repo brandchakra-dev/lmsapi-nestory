@@ -64,7 +64,7 @@ const processLead = async (leadId) => {
   try {
     // 1. FB se data fetch karo
     const { data } = await axios.get(
-      `https://graph.facebook.com/v19.0/${leadId}`,
+      `https://graph.facebook.com/v25.0/${leadId}`,
       {
         params: {
           access_token: process.env.FB_ACCESS_TOKEN,
