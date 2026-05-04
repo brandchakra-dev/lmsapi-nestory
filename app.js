@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 
@@ -17,29 +16,46 @@ const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
-// ─── CORS ─────────────────────────────────────────────────────────────────────
+const cors = require("cors");
+
 const allowedOrigins =
   process.env.NODE_ENV === "production"
-    ? ["https://lms.thenestory.in", "https://thenestory.in", "https://www.thenestory.in"]
-    : ["http://localhost:3000", "http://localhost:5173", "http://localhost:5000"];
+    ? [
+        "https://lms.thenestory.in",
+        "https://thenestory.in",
+        "https://www.thenestory.in"
+      ]
+    : [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5000"
+      ];
 
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== "production") {
-      callback(null, true);
-    } else {
-      console.log("Blocked origin:", origin);
-      callback(new Error("Not allowed by CORS"));
+  
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
+  
+    console.log("❌ Blocked origin:", origin);
+    return callback(null, false); // ❗ NO ERROR THROW
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Cookie", "Accept", "X-Requested-With"],
-  exposedHeaders: ["Set-Cookie"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Cookie",
+    "Accept",
+    "X-Requested-With"
+  ],
 };
 
 app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
 app.use(morgan("dev"));
 
 // ─── FIX 1: Webhook raw body middleware ───────────────────────────────────────

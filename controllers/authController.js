@@ -8,10 +8,18 @@ const OTPUtil = require('../utils/otp.util');
 
 const isProd = process.env.NODE_ENV === "production";
 
+// const cookieOptions = {
+//   httpOnly: true,
+//   secure: isProd,
+//   sameSite: isProd ? "none" : "lax",
+//   path: "/",
+// };
+
 const cookieOptions = {
   httpOnly: true,
-  secure: isProd,
-  sameSite: isProd ? "none" : "lax",
+  secure: true,
+  sameSite: "none",
+  domain: ".thenestory.in",
   path: "/",
 };
 
@@ -462,7 +470,7 @@ exports.resetPassword = async (req, res, next) => {
     user.password = newPassword;
     
     // Clear all sessions
-    user.refreshToken = null;
+    user.refreshTokens = [];
     
     await user.save();
 

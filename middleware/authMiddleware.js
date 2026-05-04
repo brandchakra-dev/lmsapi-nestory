@@ -52,6 +52,13 @@ exports.protect = async (req, res, next) => {
         message: "User not found"
       });
     }
+    
+    if (!user.refreshTokens || user.refreshTokens.length === 0) {
+      return res.status(401).json({
+        code: "INVALID_SESSION",
+        message: "Session expired"
+      });
+    }
 
     // ✅ Active Check
     if (!user.isActive) {
