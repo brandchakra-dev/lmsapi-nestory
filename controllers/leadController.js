@@ -29,11 +29,12 @@ exports.createLead = async (req, res, next) => {
     const lead = await Lead.create(payload);
 
     // 🔔 Notify Manager
-if (lead.assignedManager) {
+if (lead.assignedManager &&
+  lead.assignedManager.toString() !== req.user._id.toString()) {
   const manager = await User.findById(lead.assignedManager);
 
   if (manager?.pushToken) {
-    await pushService.sendPushNotification(
+     pushService.sendPushNotification(
       manager.pushToken,
       "📌 New Lead Assigned",
       `New lead created: ${lead.name}`,
@@ -41,16 +42,17 @@ if (lead.assignedManager) {
         type: "lead_created",
         leadId: lead._id,
       }
-    );
+    ).catch(console.error);
   }
 }
 
 // 🔔 Notify Executive
-if (lead.assignedExecutive) {
+if (lead.assignedExecutive &&
+  lead.assignedExecutive.toString() !== req.user._id.toString()) {
   const executive = await User.findById(lead.assignedExecutive);
 
   if (executive?.pushToken) {
-    await pushService.sendPushNotification(
+     pushService.sendPushNotification(
       executive.pushToken,
       "🎯 New Lead Assigned",
       `You have been assigned lead: ${lead.name}`,
@@ -58,7 +60,7 @@ if (lead.assignedExecutive) {
         type: "lead_created",
         leadId: lead._id,
       }
-    );
+    ).catch(console.error);
   }
 }
 
@@ -114,14 +116,15 @@ exports.updateLead = async (req, res, next) => {
     // 🔔 Executive assignment changed
     if (
       req.body.assignedExecutive &&
-      req.body.assignedExecutive !== oldExecutive
+      req.body.assignedExecutive !== oldExecutive &&
+      req.body.assignedExecutive !== req.user._id.toString()
     ) {
       const executive = await User.findById(req.body.assignedExecutive);
 
       console.log("📤 Sending push to:", executive?.pushToken);
 
       if (executive?.pushToken) {
-        await pushService.sendPushNotification(
+         pushService.sendPushNotification(
           executive.pushToken,
           "🎯 New Lead Assigned",
           `You have been assigned lead: ${lead.name}`,
@@ -129,27 +132,28 @@ exports.updateLead = async (req, res, next) => {
             type: "lead_assigned",
             leadId: lead._id,
           }
-        );
+        ).catch(console.error);
       }
     }
 
     // 🔔 Manager assignment changed
     if (
       req.body.assignedManager &&
-      req.body.assignedManager !== oldManager
+      req.body.assignedManager !== oldManager &&
+      req.body.assignedManager !== req.user._id.toString()
     ) {
       const manager = await User.findById(req.body.assignedManager);
 
       if (manager?.pushToken) {
-        await pushService.sendPushNotification(
+         pushService.sendPushNotification(
           manager.pushToken,
           "📌 Lead Assigned",
-          `A lead has been assigned to you`,
+          `A lead has been assigned to you ${lead.name}`,
           {
             type: "lead_assigned",
             leadId: lead._id,
           }
-        );
+        ).catch(console.error);
       }
     }
 
@@ -190,24 +194,6 @@ exports.getLead = async (req, res, next) => {
 
     if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-    const user = req.user;
-
-    // 🔐 Manager access
-    // if (
-    //   user.role === "manager" &&
-    //   lead.assignedManager?.toString() !== user._id.toString()
-    // ) {
-    //   return res.status(403).json({ message: "Access denied" });
-    // }
-
-    // 🔐 Executive access
-    // if (
-    //   user.role === "executive" &&
-    //   lead.assignedExecutive?.toString() !== user._id.toString()
-    // ) {
-    //   return res.status(403).json({ message: "Access denied" });
-    // }
-
     res.json(lead);
   } catch (e) {
     next(e);
@@ -226,6 +212,9 @@ exports.assignToManager = async (req, res, next) => {
     const { leadId } = req.params;
     const { managerId } = req.body;
 
+    const existingLead = await Lead.findById(leadId);
+    const oldManager = existingLead?.assignedManager?.toString();
+
     const lead = await Lead.findByIdAndUpdate(
       leadId,
       {
@@ -235,6 +224,22 @@ exports.assignToManager = async (req, res, next) => {
       },
       { new: true }
     );
+
+    const manager = await User.findById(managerId);
+
+      if ( manager?.pushToken &&
+          managerId !== req.user._id.toString() &&
+          managerId !== oldManager) {
+         pushService.sendPushNotification(
+          manager.pushToken,
+          "📌 Lead Assigned",
+          `A lead has been assigned to you`,
+          {
+            type: "lead_assigned",
+            leadId: lead._id,
+          }
+        ).catch(console.error);
+      }
 
     res.json(lead);
   } catch (e) {
@@ -263,6 +268,21 @@ exports.assignToExecutive = async (req, res, next) => {
     lead.assignedExecutive = executiveId;
     lead.updatedAt = new Date();
     await lead.save();
+
+    const executive = await User.findById(executiveId);
+
+      if (executive?.pushToken &&
+        executiveId !== req.user._id.toString()) {
+         pushService.sendPushNotification(
+          executive.pushToken,
+          "🎯 New Lead Assigned",
+          `You have been assigned lead: ${lead.name}`,
+          {
+            type: "lead_assigned",
+            leadId: lead._id,
+          }
+        ).catch(console.error);
+      }
 
     res.json(lead);
   } catch (e) {
@@ -410,69 +430,6 @@ exports.updateStatus = async (req, res, next) => {
   }
 };
 
-// exports.updateStatus = async (req, res, next) => {
-//   try {
-//     const { id } = req.params;
-//     const { status, reason } = req.body;
-
-//     const lead = await Lead.findById(id);
-//     if (!lead) return res.status(404).json({ message: "Lead not found" });
-
-//     const user = req.user;
-
-//     // Manager restriction
-//     if (
-//       user.role === "manager" &&
-//       lead.assignedManager?.toString() !== user._id.toString()
-//     ) {
-//       return res.status(403).json({ message: "Not your lead" });
-//     }
-
-//     // Executive restriction
-//     if (
-//       user.role === "executive" &&
-//       lead.assignedExecutive?.toString() !== user._id.toString()
-//     ) {
-//       return res.status(403).json({ message: "Not your lead" });
-//     }
-
-//     lead.status = status;
-
-//     if (status === "inactive") {
-//       lead.inactiveReason = reason || "";
-//       lead.inactiveDate = new Date();
-//     }
-
-//     if (status === "booked") {
-//       lead.statusHistory.push({
-//         from: "booking",
-//         to: `Amount ₹${lead.bookingDetails?.bookingAmount || ""}`,
-//         reason: "Property booked",
-//         changedBy: user._id
-//       });
-//     }
-
-//     // status history
-//     const oldStatus = lead.status;
-
-//     lead.statusHistory.push({
-//       from: oldStatus,
-//       to: status,
-//       reason: reason || "",
-//       changedBy: user._id,
-//       date: new Date()
-//     });
-
-//     await lead.save();
-
-//     const io = req.app.get("io");
-//     if (io) io.emit("lead:statusUpdated", lead);
-
-//     res.json(lead);
-//   } catch (e) {
-//     next(e);
-//   }
-// };
 
 exports.getLeadTimeline = async (req, res, next) => {
   try {
@@ -1245,7 +1202,7 @@ exports.getRecentActivities = async (req, res, next) => {
           _id: `followup-${lead._id}-${idx}`,
           type: 'followup',
           text: `Follow-up scheduled: ${followup.note}`,
-          time: followup.createdAt,
+          time: followup.followUpAt,
           user: followup.createdBy?.name || lead.assignedExecutive?.name,
           leadId: lead._id,
           leadName: lead.name,

@@ -2,6 +2,9 @@ const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const { ROLE_PERMISSIONS } = require("../utils/permissions");
 const { generateAccessToken, generateRefreshToken } = require("../utils/jwt");
+const redisService = require('../services/redis.service');
+const emailService = require('../services/email.service');
+const OTPUtil = require('../utils/otp.util');
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -11,6 +14,17 @@ const cookieOptions = {
   sameSite: isProd ? "none" : "lax",
   path: "/",
 };
+
+// Initialize Redis on server start
+(async () => {
+  try {
+    await redisService.connect();
+  } catch (error) {
+    console.error('Failed to connect to Redis:', error);
+  }
+})();
+
+// ==================== EXISTING CODE (DON'T MODIFY) ====================
 
 /* REGISTER */
 exports.register = async (req, res, next) => {
@@ -54,15 +68,26 @@ exports.login = async (req, res, next) => {
 
     // const user = await User.findOne({ email });
     const user = await User.findOne({ email }).populate('assignedManager', 'name email role');
+
+    const isMatch = await user.matchPassword(password);
+
+    if (!user) {
+      return res.status(401).json({
+        code: "INVALID_CREDENTIALS",
+        message: "Invalid email or password"
+      });
+    }
     
-    if (!user) return res.status(401).json({ message: "Invalid credentials" });
+    if (!isMatch) {
+      return res.status(401).json({
+        code: "INVALID_CREDENTIALS",
+        message: "Invalid email or password"
+      });
+    }
 
     if (!user.isActive)
       return res.status(403).json({ message: "Account inactive" });
 
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch)
-      return res.status(401).json({ message: "Invalid credentials" });
 
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
@@ -82,6 +107,7 @@ exports.login = async (req, res, next) => {
 
     res.json({
       token: accessToken,
+      refreshToken: refreshToken,
       user: {
         _id: user._id,
         name: user.name,
@@ -101,26 +127,51 @@ exports.login = async (req, res, next) => {
 
 exports.refreshToken = async (req, res) => {
   try {
-    const token = req.cookies.refreshToken;
-    if (!token) return res.status(401).json({ message: "No refresh token" });
 
-    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    const token =
+      req.cookies?.refreshToken ||
+      req.body?.refreshToken ||
+      req.headers["x-refresh-token"];
+
+    if (!token) {
+      return res.status(401).json({
+        code: "NO_REFRESH_TOKEN",
+        message: "No refresh token"
+      });
+    }
+
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_REFRESH_SECRET
+    );
 
     const user = await User.findById(decoded.id);
-    if (!user || user.refreshToken !== token)
-      return res.status(401).json({ message: "Invalid session" });
+
+    if (!user || user.refreshToken !== token) {
+      return res.status(401).json({
+        code: "INVALID_SESSION",
+        message: "Invalid session"
+      });
+    }
 
     const newAccessToken = generateAccessToken(user);
 
+    // 🍪 Web → set cookie
     res.cookie("accessToken", newAccessToken, {
       ...cookieOptions,
-      maxAge: 15 * 60 * 1000
+      maxAge: 15 * 60 * 1000,
     });
 
-    res.json({ success: true });
+    // 📱 Mobile → send JSON
+    res.json({
+      accessToken: newAccessToken
+    });
 
   } catch {
-    res.status(401).json({ message: "Session expired" });
+    res.status(401).json({
+      code: "SESSION_EXPIRED",
+      message: "Session expired"
+    });
   }
 };
 
@@ -134,9 +185,378 @@ exports.logout = async (req, res) => {
     await req.user.save();
   }
 
-  res.clearCookie("accessToken");
-  res.clearCookie("refreshToken");
+  res.clearCookie("accessToken", cookieOptions);
+  res.clearCookie("refreshToken", cookieOptions);
 
   res.json({ message: "Logged out" });
 };
+
+// ==================== NEW PRODUCTION-READY FUNCTIONS ====================
+
+/**
+ * @desc    Forgot Password - Send OTP
+ * @route   POST /api/auth/forgot-password
+ * @access  Public
+ */
+exports.forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    // ================= VALIDATION =================
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required"
+      });
+    }
+
+    // ================= USER CHECK =================
+    const user = await User.findOne({ email }).select("name email");
+
+    // Security: don't reveal user existence
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message:
+          "If an account exists with this email, you will receive an OTP"
+      });
+    }
+
+    // ================= RESEND COOLDOWN CHECK (60 sec) =================
+    const resendBlock = await redisService.get(`resend:${email}`);
+
+    if (resendBlock) {
+      const timeLeft = Math.ceil(
+        (resendBlock.expiresAt - Date.now()) / 1000
+      );
+
+      if (timeLeft > 0) {
+        return res.status(429).json({
+          success: false,
+          message: `Please wait ${timeLeft} seconds before requesting a new OTP`,
+          waitTime: timeLeft
+        });
+      }
+    }
+
+    // ================= ATTEMPTS CHECK =================
+    const attempts = await redisService.getAttempts(`otp:${email}`);
+
+    if (attempts >= 3) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many attempts. Please try again after 1 hour."
+      });
+    }
+
+    // ================= GENERATE OTP =================
+    const { otp, expiresAt } = OTPUtil.generateOTPWithExpiry(6, 10);
+
+    // ================= STORE OTP (10 min) =================
+    await redisService.set(
+      `otp:${email}`,
+      {
+        otp: OTPUtil.hashOTP(otp),
+        expiresAt,
+        attempts: 0,
+        email,
+        userId: user._id.toString()
+      },
+      600 // 10 minutes
+    );
+
+    // ================= SEND EMAIL =================
+    await emailService.sendOTPEmail(email, otp, user.name);
+
+    // ================= SET RESEND COOLDOWN (60 sec) =================
+    await redisService.set(
+      `resend:${email}`,
+      {
+        expiresAt: Date.now() + 60 * 1000
+      },
+      60
+    );
+
+    // ================= DEBUG LOG =================
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`🔐 OTP for ${email}: ${otp}`);
+    }
+
+    // ================= RESPONSE =================
+    res.json({
+      success: true,
+      message:
+        "If an account exists with this email, you will receive an OTP"
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Verify OTP
+ * @route   POST /api/auth/verify-otp
+ * @access  Public
+ */
+exports.verifyOTP = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Email and OTP are required" 
+      });
+    }
+
+    // Get stored OTP
+    const stored = await redisService.get(`otp:${email}`);
+    if (!stored) {
+      return res.status(400).json({ 
+        success: false,
+        message: "OTP expired or not found. Please request a new OTP." 
+      });
+    }
+
+    // Check expiry
+    if (stored.expiresAt < Date.now()) {
+      await redisService.delete(`otp:${email}`);
+      return res.status(400).json({ 
+        success: false,
+        message: "OTP expired. Please request a new OTP." 
+      });
+    }
+
+    // Increment and check attempts
+    const attempts = await redisService.incrementAttempts(`otp:${email}`);
+    if (attempts > 5) {
+      await redisService.delete(`otp:${email}`);
+      return res.status(429).json({ 
+        success: false,
+        message: "Too many failed attempts. Please request a new OTP." 
+      });
+    }
+
+    // Verify OTP
+    if (!OTPUtil.verifyOTP(otp, stored.otp)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid OTP. Please try again.",
+        attemptsLeft: 5 - attempts
+      });
+    }
+
+    // Mark as verified (store a temporary token)
+    const verificationToken = jwt.sign(
+      { email, purpose: 'password-reset' },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    await redisService.set(`verified:${email}`, {
+      verified: true,
+      token: verificationToken
+    }, 900); // 15 minutes
+
+    res.json({
+      success: true,
+      message: "OTP verified successfully",
+      verificationToken // Send token for next step
+    });
+
+  } catch (error) {
+    console.error("Verify OTP error:", error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Reset Password
+ * @route   POST /api/auth/reset-password
+ * @access  Public
+ */
+exports.resetPassword = async (req, res, next) => {
+  try {
+    const { email, otp, newPassword, verificationToken } = req.body;
+
+    if (!email || !newPassword) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Email and new password are required" 
+      });
+    }
+
+    // Validate verification token
+    if (!verificationToken) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Verification required. Please verify OTP first." 
+      });
+    }
+
+    try {
+      jwt.verify(verificationToken, process.env.JWT_SECRET);
+    } catch (tokenError) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Verification expired. Please restart the process." 
+      });
+    }
+
+    // Check if verified
+    const verified = await redisService.get(`verified:${email}`);
+    if (!verified || !verified.verified) {
+      return res.status(400).json({ 
+        success: false,
+        message: "OTP not verified. Please verify OTP first." 
+      });
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ 
+        success: false,
+        message: passwordValidation.message 
+      });
+    }
+
+    // Find and update user
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found" 
+      });
+    }
+
+    // Update password (will be hashed by pre-save hook)
+    user.password = newPassword;
+    
+    // Clear all sessions
+    user.refreshToken = null;
+    
+    await user.save();
+
+    // Clean up Redis
+    await redisService.delete(`otp:${email}`);
+    await redisService.delete(`verified:${email}`);
+
+    // Log password change
+    console.log(`🔐 Password reset successful for: ${email}`);
+
+    // Send confirmation email
+    try {
+      await emailService.sendPasswordChangeConfirmation(email, user.name);
+    } catch (emailError) {
+      console.error('Failed to send confirmation email:', emailError);
+    }
+
+    res.json({
+      success: true,
+      message: "Password reset successfully. Please login with your new password.",
+    });
+
+  } catch (error) {
+    console.error("Reset password error:", error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Resend OTP
+ * @route   POST /api/auth/resend-otp
+ * @access  Public
+ */
+exports.resendOTP = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Email is required" 
+      });
+    }
+
+    const user = await User.findOne({ email }).select('name email');
+    if (!user) {
+      return res.status(200).json({ 
+        success: true,
+        message: "If an account exists, you will receive an OTP" 
+      });
+    }
+
+    // Check rate limiting
+    const lastResend = await redisService.get(`resend:${email}`);
+    if (lastResend) {
+      const timeLeft = Math.ceil((lastResend.expiresAt - Date.now()) / 1000);
+      if (timeLeft > 0) {
+        return res.status(429).json({ 
+          success: false,
+          message: `Please wait ${timeLeft} seconds before resending OTP`,
+          waitTime: timeLeft
+        });
+      }
+    }
+
+    // Generate new OTP
+    const { otp, expiresAt } = OTPUtil.generateOTPWithExpiry(6, 10);
+
+    // Store in Redis
+    await redisService.set(`otp:${email}`, {
+      otp: OTPUtil.hashOTP(otp),
+      expiresAt,
+      attempts: 0,
+      email,
+      userId: user._id.toString()
+    }, 600);
+
+    // Store resend timestamp
+    await redisService.set(`resend:${email}`, {
+      expiresAt: Date.now() + 60 * 1000 // 1 minute cooldown
+    }, 60);
+
+    // Send email
+    try {
+      await emailService.sendOTPEmail(email, otp, user.name);
+    } catch (emailError) {
+      console.error('Failed to send email:', emailError);
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`📧 Resent OTP for ${email}: ${otp}`);
+    }
+
+    res.json({
+      success: true,
+      message: "OTP resent successfully",
+    });
+
+  } catch (error) {
+    console.error("Resend OTP error:", error);
+    next(error);
+  }
+};
+
+// Helper function for password validation
+function validatePassword(password) {
+  if (password.length < 6) {
+    return { valid: false, message: "Password must be at least 6 characters long" };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one uppercase letter" };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one lowercase letter" };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one number" };
+  }
+  if (!/[!@#$%^&*]/.test(password)) {
+    return { valid: false, message: "Password must contain at least one special character (!@#$%^&*)" };
+  }
+  return { valid: true };
+}
 

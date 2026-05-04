@@ -81,9 +81,9 @@ const userSchema = new mongoose.Schema({
   loginAttempts: { type: Number, default: 0 },
   lockUntil: { type: Date },
 
-  refreshToken: {
-    type: String,
-    default: null
+  refreshTokens: {
+    type: [String],
+    default: []
   },
 
   pushToken: {

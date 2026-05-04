@@ -66,24 +66,25 @@ exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    // const user = await User.findOne({ email });
     const user = await User.findOne({ email }).populate('assignedManager', 'name email role');
 
-    const isMatch = await user.matchPassword(password);
+      // ❌ PEHLE NULL CHECK
+      if (!user) {
+        return res.status(401).json({
+          code: "INVALID_CREDENTIALS",
+          message: "Invalid email or password"
+        });
+      }
 
-    if (!user) {
-      return res.status(401).json({
-        code: "INVALID_CREDENTIALS",
-        message: "Invalid email or password"
-      });
-    }
-    
-    if (!isMatch) {
-      return res.status(401).json({
-        code: "INVALID_CREDENTIALS",
-        message: "Invalid email or password"
-      });
-    }
+      // ✅ FIR password check
+      const isMatch = await user.matchPassword(password);
+
+      if (!isMatch) {
+        return res.status(401).json({
+          code: "INVALID_CREDENTIALS",
+          message: "Invalid email or password"
+        });
+      }
 
     if (!user.isActive)
       return res.status(403).json({ message: "Account inactive" });
@@ -92,7 +93,10 @@ exports.login = async (req, res, next) => {
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
-    user.refreshToken = refreshToken;
+    if (!user.refreshTokens.includes(refreshToken)) {
+      user.refreshTokens.push(refreshToken);
+    }
+
     await user.save();
 
     res.cookie("accessToken", accessToken, {
@@ -147,7 +151,7 @@ exports.refreshToken = async (req, res) => {
 
     const user = await User.findById(decoded.id);
 
-    if (!user || user.refreshToken !== token) {
+    if (!user || !user.refreshTokens.includes(token)) {
       return res.status(401).json({
         code: "INVALID_SESSION",
         message: "Invalid session"
@@ -180,16 +184,39 @@ exports.me = async (req, res) => {
 };
 
 exports.logout = async (req, res) => {
-  if (req.user) {
-    req.user.refreshToken = null;
-    await req.user.save();
+  try {
+    if (req.user) {
+      // 🔥 current refresh token nikaalo
+      const token =
+        req.cookies?.refreshToken ||
+        req.body?.refreshToken ||
+        req.headers["x-refresh-token"];
+
+      console.log("🚪 Logout token:", token);
+
+      if (token) {
+        // 🔥 sirf ye device ka token remove karo
+        req.user.refreshTokens = req.user.refreshTokens.filter(
+          (t) => t !== token
+        );
+
+        await req.user.save();
+      }
+    }
+
+    // 🍪 cookies clear
+    res.clearCookie("accessToken", cookieOptions);
+    res.clearCookie("refreshToken", cookieOptions);
+
+    res.json({ message: "Logged out" });
+
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ message: "Logout failed" });
   }
-
-  res.clearCookie("accessToken", cookieOptions);
-  res.clearCookie("refreshToken", cookieOptions);
-
-  res.json({ message: "Logged out" });
 };
+
+
 
 // ==================== NEW PRODUCTION-READY FUNCTIONS ====================
 
