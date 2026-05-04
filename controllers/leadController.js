@@ -98,8 +98,8 @@ exports.updateLead = async (req, res, next) => {
     // ===============================
     // 🧠 STORE OLD ASSIGNMENTS
     // ===============================
-    // const oldExecutive = lead.assignedExecutive?.toString();
-    // const oldManager = lead.assignedManager?.toString();
+    const oldExecutive = lead.assignedExecutive?.toString();
+    const oldManager = lead.assignedManager?.toString();
 
     // ===============================
     // ✏️ UPDATE LEAD
@@ -157,11 +157,36 @@ exports.updateLead = async (req, res, next) => {
     //   }
     // }
 
+    setTimeout(async () => {
+      if (
+            req.body.assignedExecutive &&
+            req.body.assignedExecutive !== oldExecutive &&
+            req.body.assignedExecutive !== req.user._id.toString()
+          ) {
+            const executive = await User.findById(req.body.assignedExecutive);
+
+            console.log("📤 Sending push to:", executive?.pushToken);
+
+            if (executive?.pushToken) {
+              pushService.sendPushNotification(
+                executive.pushToken,
+                "🎯 New Lead Assigned",
+                `You have been assigned lead: ${lead.name}`,
+                {
+                  type: "lead_assigned",
+                  leadId: lead._id,
+                }
+              ).catch(console.error);
+            }
+          }
+    }, 0);
+
     res.json(lead);
   } catch (e) {
     next(e);
   }
 };
+
 
 // ✅ Get All Leads (role-based)
 exports.getLeads = async (req, res, next) => {
