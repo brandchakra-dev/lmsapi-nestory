@@ -224,8 +224,6 @@ exports.logout = async (req, res) => {
   }
 };
 
-
-
 // ==================== NEW PRODUCTION-READY FUNCTIONS ====================
 
 /**

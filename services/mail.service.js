@@ -5,15 +5,15 @@ const transporter = nodemailer.createTransport({
   port:   parseInt(process.env.SMTP_PORT),
   secure: process.env.SMTP_SECURE === "true",
   auth: {
-    user: process.env.SMTP_USER,   // "apikey" — literally the string
-    pass: process.env.SMTP_PASS,   // your SG.xxx key
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
   },
 });
 
 // ─── Verify connection on startup ─────────────────────────────────────────────
 transporter.verify((err) => {
   if (err) console.error("Mail transporter error:", err.message);
-  else     console.log("Mail transporter ready — SendGrid connected");
+  else     console.log("Mail transporter ready — Hostinger mail connected");
 });
 
 // ─── Helper: details object → HTML table rows ─────────────────────────────────
@@ -33,7 +33,7 @@ const detailRows = (details) => {
 exports.sendLeadEmailToAdmin = async (lead) => {
   try {
     await transporter.sendMail({
-      from:    `"The Nestory LMS" <${process.env.SMTP_USER === "apikey"
+      from:    `"The Nestory LMS" <${process.env.SMTP_USER === "info@thenestory.in"
                  ? process.env.ADMIN_EMAIL
                  : process.env.SMTP_USER}>`,
       to:      process.env.ADMIN_EMAIL,

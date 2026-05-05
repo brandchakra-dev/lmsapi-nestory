@@ -18,14 +18,12 @@ class EmailService {
 
     this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT) || 587,
-      secure: false, // 587 ke liye false
+      port: parseInt(process.env.SMTP_PORT),
+      secure: process.env.SMTP_SECURE === "true",
       auth: {
-        user: process.env.SMTP_USER, 
-        pass: process.env.SMTP_PASS, 
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
-      debug: true, // Debug on
-      logger: true, // Logging on
     });
 
     // Verify connection
@@ -42,7 +40,7 @@ class EmailService {
       await this.initialize();
 
       const mailOptions = {
-        from: `"The Nestory LMS" <${process.env.SMTP_FROM || 'info@thenestory.in'}>`,
+        from: `"The Nestory" <${process.env.EMAIL_FROM || 'info@thenestory.in'}>`,
         to,
         subject: 'Password Reset OTP - The Nestory LMS',
         html: this.getOTPEmailTemplate(otp, userName),
