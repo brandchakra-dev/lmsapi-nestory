@@ -103,7 +103,7 @@ app.use("/api/reports",    reportRoutes);
 app.use("/api/followups",  followupRoutes);
 app.use("/api/webhook",    webhookRoutes); 
 
-app.post("/api/debug-email", debugRoutes);
+app.use("/api", debugRoutes);
 
 app.use(errorHandler);
 
