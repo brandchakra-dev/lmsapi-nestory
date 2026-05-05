@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+
 router.post("/debug-email", async (req, res) => {
     try {
       const { email } = req.body;
@@ -34,3 +35,5 @@ router.post("/debug-email", async (req, res) => {
       });
     }
   });
+
+  module.exports = router;
