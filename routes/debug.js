@@ -1,4 +1,6 @@
-app.post("/debug-email", async (req, res) => {
+const express = require('express');
+const router = express.Router();
+router.post("/debug-email", async (req, res) => {
     try {
       const { email } = req.body;
   
