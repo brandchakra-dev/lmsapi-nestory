@@ -21,8 +21,8 @@ class EmailService {
       port: parseInt(process.env.SMTP_PORT) || 587,
       secure: false, // 587 ke liye false
       auth: {
-        user: process.env.SMTP_USER, // "apikey"
-        pass: process.env.SMTP_PASS, // API key
+        user: process.env.SMTP_USER, 
+        pass: process.env.SMTP_PASS, 
       },
       debug: true, // Debug on
       logger: true, // Logging on
@@ -42,9 +42,9 @@ class EmailService {
       await this.initialize();
 
       const mailOptions = {
-        from: `"The Nestory" <${process.env.EMAIL_FROM || 'info@thenestory.in'}>`,
+        from: `"The Nestory LMS" <${process.env.SMTP_FROM || 'info@thenestory.in'}>`,
         to,
-        subject: 'Password Reset OTP - The Nestory',
+        subject: 'Password Reset OTP - The Nestory LMS',
         html: this.getOTPEmailTemplate(otp, userName),
         text: `Your OTP for password reset is: ${otp}. It will expire in 10 minutes.`
       };

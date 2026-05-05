@@ -113,79 +113,56 @@ exports.updateLead = async (req, res, next) => {
     // 🚀 NOTIFICATION LOGIC
     // ===============================
 
-    // // 🔔 Executive assignment changed
-    // if (
-    //   req.body.assignedExecutive &&
-    //   req.body.assignedExecutive !== oldExecutive &&
-    //   req.body.assignedExecutive !== req.user._id.toString()
-    // ) {
-    //   const executive = await User.findById(req.body.assignedExecutive);
+    // 🔔 Executive assignment changed
+    if (
+      req.body.assignedExecutive &&
+      req.body.assignedExecutive !== oldExecutive &&
+      req.body.assignedExecutive !== req.user._id.toString()
+    ) {
+      const executive = await User.findById(req.body.assignedExecutive);
 
-    //   console.log("📤 Sending push to:", executive?.pushToken);
+      console.log("📤 Sending push to:", executive?.pushToken);
 
-    //   if (executive?.pushToken) {
-    //      pushService.sendPushNotification(
-    //       executive.pushToken,
-    //       "🎯 New Lead Assigned",
-    //       `You have been assigned lead: ${lead.name}`,
-    //       {
-    //         type: "lead_assigned",
-    //         leadId: lead._id,
-    //       }
-    //     ).catch(console.error);
-    //   }
-    // }
-
-    // // 🔔 Manager assignment changed
-    // if (
-    //   req.body.assignedManager &&
-    //   req.body.assignedManager !== oldManager &&
-    //   req.body.assignedManager !== req.user._id.toString()
-    // ) {
-    //   const manager = await User.findById(req.body.assignedManager);
-
-    //   if (manager?.pushToken) {
-    //      pushService.sendPushNotification(
-    //       manager.pushToken,
-    //       "📌 Lead Assigned",
-    //       `A lead has been assigned to you ${lead.name}`,
-    //       {
-    //         type: "lead_assigned",
-    //         leadId: lead._id,
-    //       }
-    //     ).catch(console.error);
-    //   }
-    // }
-
-    setTimeout(async () => {
-      if (
-            req.body.assignedExecutive &&
-            req.body.assignedExecutive !== oldExecutive &&
-            req.body.assignedExecutive !== req.user._id.toString()
-          ) {
-            const executive = await User.findById(req.body.assignedExecutive);
-
-            console.log("📤 Sending push to:", executive?.pushToken);
-
-            if (executive?.pushToken) {
-              pushService.sendPushNotification(
-                executive.pushToken,
-                "🎯 New Lead Assigned",
-                `You have been assigned lead: ${lead.name}`,
-                {
-                  type: "lead_assigned",
-                  leadId: lead._id,
-                }
-              ).catch(console.error);
-            }
+      if (executive?.pushToken) {
+         pushService.sendPushNotification(
+          executive.pushToken,
+          "🎯 New Lead Assigned",
+          `You have been assigned lead: ${lead.name}`,
+          {
+            type: "lead_assigned",
+            leadId: lead._id,
           }
-    }, 0);
+        ).catch(console.error);
+      }
+    }
+
+    // 🔔 Manager assignment changed
+    if (
+      req.body.assignedManager &&
+      req.body.assignedManager !== oldManager &&
+      req.body.assignedManager !== req.user._id.toString()
+    ) {
+      const manager = await User.findById(req.body.assignedManager);
+
+      if (manager?.pushToken) {
+         pushService.sendPushNotification(
+          manager.pushToken,
+          "📌 Lead Assigned",
+          `A lead has been assigned to you ${lead.name}`,
+          {
+            type: "lead_assigned",
+            leadId: lead._id,
+          }
+        ).catch(console.error);
+      }
+    }
 
     res.json(lead);
   } catch (e) {
     next(e);
   }
 };
+
 
 
 // ✅ Get All Leads (role-based)
