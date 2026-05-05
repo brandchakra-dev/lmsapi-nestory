@@ -273,7 +273,7 @@ exports.forgotPassword = async (req, res, next) => {
     }
 
     // ================= ATTEMPTS CHECK =================
-    const attempts = await redisService.getAttempts(`otp:${email}`);
+    const attempts = (await redisService.getAttempts(`otp:${email}`)) || 0;
 
     if (attempts >= 3) {
       return res.status(429).json({
@@ -286,29 +286,58 @@ exports.forgotPassword = async (req, res, next) => {
     const { otp, expiresAt } = OTPUtil.generateOTPWithExpiry(6, 10);
 
     // ================= STORE OTP (10 min) =================
-    await redisService.set(
-      `otp:${email}`,
-      {
-        otp: OTPUtil.hashOTP(otp),
-        expiresAt,
-        attempts: 0,
-        email,
-        userId: user._id.toString()
-      },
-      600 // 10 minutes
-    );
+
+
+    try {
+      await redisService.set(
+        `otp:${email}`,
+        {
+          otp: OTPUtil.hashOTP(otp),
+          expiresAt,
+          attempts: 0,
+          email,
+          userId: user._id.toString()
+        },
+        600 // 10 minutes
+      )
+    } catch (err) {
+      console.error("REDIS SET FAILED:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Internal error (redis)"
+      });
+    }
 
     // ================= SEND EMAIL =================
-    await emailService.sendOTPEmail(email, otp, user.name);
+    try {
+      await emailService.sendOTPEmail(email, otp, user.name);
+    } catch (err) {
+      console.error("EMAIL FAILED:", err);
+    
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send OTP email"
+      });
+    }
 
     // ================= SET RESEND COOLDOWN (60 sec) =================
-    await redisService.set(
-      `resend:${email}`,
-      {
-        expiresAt: Date.now() + 60 * 1000
-      },
-      60
-    );
+
+
+    try {
+      await redisService.set(
+        `resend:${email}`,
+        {
+          expiresAt: Date.now() + 60 * 1000
+        },
+        60
+      );
+    } catch (err) {
+      console.error("REDIS SET FAILED:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Internal error (redis)"
+      });
+    }
 
     // ================= DEBUG LOG =================
     if (process.env.NODE_ENV !== "production") {
@@ -394,10 +423,20 @@ exports.verifyOTP = async (req, res, next) => {
       { expiresIn: '15m' }
     );
 
-    await redisService.set(`verified:${email}`, {
-      verified: true,
-      token: verificationToken
-    }, 900); // 15 minutes
+    
+
+    try {
+      await redisService.set(`verified:${email}`, {
+        verified: true,
+        token: verificationToken
+      }, 900); // 15 minutes
+    } catch (err) {
+      console.error("REDIS SET FAILED:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Internal error (redis)"
+      });
+    }
 
     res.json({
       success: true,
@@ -544,7 +583,10 @@ exports.resendOTP = async (req, res, next) => {
     // Generate new OTP
     const { otp, expiresAt } = OTPUtil.generateOTPWithExpiry(6, 10);
 
-    // Store in Redis
+
+
+    try {
+          // Store in Redis
     await redisService.set(`otp:${email}`, {
       otp: OTPUtil.hashOTP(otp),
       expiresAt,
@@ -552,17 +594,39 @@ exports.resendOTP = async (req, res, next) => {
       email,
       userId: user._id.toString()
     }, 600);
+    } catch (err) {
+      console.error("REDIS SET FAILED:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Internal error (redis)"
+      });
+    }
 
+
+    try {
+     
     // Store resend timestamp
     await redisService.set(`resend:${email}`, {
       expiresAt: Date.now() + 60 * 1000 // 1 minute cooldown
     }, 60);
+    } catch (err) {
+      console.error("REDIS SET FAILED:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Internal error (redis)"
+      });
+    }
 
     // Send email
     try {
       await emailService.sendOTPEmail(email, otp, user.name);
-    } catch (emailError) {
-      console.error('Failed to send email:', emailError);
+    } catch (err) {
+      console.error("EMAIL FAILED:", err);
+    
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send OTP email"
+      });
     }
 
     if (process.env.NODE_ENV !== 'production') {
