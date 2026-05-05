@@ -1,3 +1,4 @@
+global.File = class File {};
 require('dotenv').config();
 const app = require('./app');
 const mongoose = require('mongoose');
