@@ -145,16 +145,18 @@ exports.updateLead = async (req, res, next) => {
 
       console.log("📤 Sending push to:", executive?.pushToken);
 
-      if (executive?.pushToken) {
-         pushService.sendPushNotification(
-          executive.pushToken,
-          "🎯 New Lead Assigned",
-          `You have been assigned lead: ${lead.name}`,
-          {
-            type: "lead_assigned",
-            leadId: lead._id,
-          }
-        ).catch(console.error);
+      if (executive?.pushToken) {   
+        setImmediate(() => {
+          pushService.sendPushNotification(
+            executive.pushToken,
+            "🎯 New Lead Assigned",
+            `You have been assigned lead: ${lead.name}`,
+            {
+              type: "lead_assigned",
+              leadId: lead._id,
+            }
+          ).catch(console.error);
+        });
       }
     }
 
@@ -177,6 +179,7 @@ exports.updateLead = async (req, res, next) => {
     }
 
       if (manager?.pushToken) {
+        setImmediate(() => {
          pushService.sendPushNotification(
           manager.pushToken,
           "📌 Lead Assigned",
@@ -186,6 +189,7 @@ exports.updateLead = async (req, res, next) => {
             leadId: lead._id,
           }
         ).catch(console.error);
+      });
       }
     }
 
@@ -194,7 +198,6 @@ exports.updateLead = async (req, res, next) => {
     next(e);
   }
 };
-
 
 // ✅ Get All Leads (role-based)
 exports.getLeads = async (req, res, next) => {
