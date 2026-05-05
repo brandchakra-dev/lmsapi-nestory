@@ -1,6 +1,7 @@
 const pushService = require('../services/push.service');
 const User = require('../models/User');
 const Lead = require("../models/Lead");
+const mongoose = require("mongoose");
 
 // ✅ Create Lead
 exports.createLead = async (req, res, next) => {
@@ -74,7 +75,17 @@ if (lead.assignedExecutive &&
 };
 
 exports.updateLead = async (req, res, next) => {
+
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: "Invalid lead ID" });
+  }
+
+  console.log("UPDATE BODY:", req.body);
+  console.log("LEAD ID:", req.params.id);
+
   try {
+
+
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
 
@@ -119,7 +130,18 @@ exports.updateLead = async (req, res, next) => {
       req.body.assignedExecutive !== oldExecutive &&
       req.body.assignedExecutive !== req.user._id.toString()
     ) {
-      const executive = await User.findById(req.body.assignedExecutive);
+
+      // const executive = await User.findById(req.body.assignedExecutive);
+
+      let executive = null;
+      if (
+        req.body.assignedExecutive &&
+        mongoose.Types.ObjectId.isValid(req.body.assignedExecutive)
+      ) {
+        executive = await User.findById(req.body.assignedExecutive);
+      } else if (req.body.assignedExecutive) {
+        console.error("❌ Invalid Executive ID:", req.body.assignedExecutive);
+      }
 
       console.log("📤 Sending push to:", executive?.pushToken);
 
@@ -142,7 +164,17 @@ exports.updateLead = async (req, res, next) => {
       req.body.assignedManager !== oldManager &&
       req.body.assignedManager !== req.user._id.toString()
     ) {
-      const manager = await User.findById(req.body.assignedManager);
+      // const manager = await User.findById(req.body.assignedManager);
+
+      let manager = null;
+    if (
+      req.body.assignedManager &&
+      mongoose.Types.ObjectId.isValid(req.body.assignedManager)
+    ) {
+      manager = await User.findById(req.body.assignedManager);
+    } else if (req.body.assignedManager) {
+      console.error("❌ Invalid Manager ID:", req.body.assignedManager);
+    }
 
       if (manager?.pushToken) {
          pushService.sendPushNotification(
@@ -162,7 +194,6 @@ exports.updateLead = async (req, res, next) => {
     next(e);
   }
 };
-
 
 
 // ✅ Get All Leads (role-based)

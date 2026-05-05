@@ -29,7 +29,9 @@ exports.sendPushNotification = async (pushToken, title, body, data = {}) => {
       channelId: 'default',  
     };
 
-    await expo.sendPushNotificationsAsync([message]);
+    expo.sendPushNotificationsAsync([message])
+  .then(() => console.log("✅ Push sent"))
+  .catch(err => console.error("Push error:", err));
 
     console.log("✅ Push sent");
 
