@@ -323,7 +323,14 @@ exports.forgotPassword = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Forgot password error:", error);
-    next(error);
+  
+    return res.status(500).json({
+      success: false,
+      message: "Forgot password failed",
+      error: process.env.NODE_ENV === "production"
+        ? error.message   // 🔥 TEMP enable for debugging
+        : error.stack
+    });
   }
 };
 

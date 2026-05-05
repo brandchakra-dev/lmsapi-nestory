@@ -32,6 +32,7 @@ class EmailService {
       console.log("✅ SMTP connection verified");
     } catch (error) {
       console.error("❌ SMTP connection failed:", error);
+      throw error; // ❗ must
     }
   }
 
@@ -59,7 +60,12 @@ class EmailService {
       
       return info;
     } catch (error) {
-      console.error("❌ Email sending failed:", error);
+      console.error("❌ Email sending failed:", {
+        message: error.message,
+        code: error.code,
+        response: error.response
+      });
+    
       throw error;
     }
   }

@@ -12,6 +12,8 @@ const projectRoutes    = require("./routes/projectRoutes");
 const followupRoutes   = require("./routes/followupRoutes");
 const webhookRoutes    = require("./routes/webhookRoutes");
 
+const debugRoutes    = require("./routes/debug");
+
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -85,6 +87,7 @@ app.use(cookieParser());
 // ─── Static ───────────────────────────────────────────────────────────────────
 app.use("/uploads", express.static("uploads"));
 
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get("/", (req, res) => res.status(200).send("API Running"));
 app.get("/api/health", (req, res) => res.status(200).send("OK"));
@@ -98,7 +101,9 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/project",    projectRoutes);
 app.use("/api/reports",    reportRoutes);
 app.use("/api/followups",  followupRoutes);
-app.use("/api/webhook",    webhookRoutes);   // ✅ matches raw body middleware above
+app.use("/api/webhook",    webhookRoutes); 
+
+router.post("/api/debug-email", debugRoutes);
 
 app.use(errorHandler);
 
